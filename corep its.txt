@@ -1,0 +1,1460 @@
+Option Explicit
+Sub COREP_ITS()
+                                                             '''''''''''''''''''''' Makro do automatyzacji Pakietu AdekwatnoúÊ''''''''''''''''''''''
+                                                             
+                                                                     '''''''''''''''''''''' Ustawiamy zmienne w makrze ''''''''''''''''''''''
+Dim strPath As String
+Dim Rng As Range
+Dim ost As Long
+Dim kol As Integer
+Dim vrg As Range
+Dim Total As Double
+Dim cIndex As Variant
+Dim rTable As Range
+Dim rCol As Range
+Dim rCriteria As Range
+Dim LastRow As Long
+Dim LastCol As Long
+Dim rCol1 As Range
+Dim rCol2 As Range
+Dim rCol3 As Range
+Dim lr As Long, ptver As Long
+Dim tbName As String
+Dim lr1 As Long, ptver1 As Long
+Dim tbName1 As String
+Dim currentColumn         As Integer
+Dim columnHeading         As String
+Dim rDelete               As Excel.Range
+Dim sh_s As Worksheet, sh_d As Worksheet
+Dim vl1 As Range
+Dim vl2 As Range
+Dim PivTbl As PivotTable
+Dim PivTbl1 As PivotTable
+Dim MyFolder As String
+Dim MyRange As Range
+Dim sStr As String, colHead As String
+Dim mySheets As Sheets
+Dim mySheet As Worksheet
+Dim MyFile As String
+Dim MyFileKRAJ As String
+Dim MyFileCA As String
+Dim MyFileLR As String
+Dim wbStart As Workbook
+
+                                                   '''''''''''''''''''''' Budujemy zbiory danych - Tabela_COREP, RES_MAT, NPE, DEFAULT ''''''''''''''''''''''
+                
+
+''''Otwieramy templatke COREP_ITS automatycznie ze wskazanego folderu''''
+Dim wb
+Dim CarryOn
+MyFolder = "\\bank.ad.pkobp.pl\dfs\DaneGrupowe\BH\BPR\Wlasne\003_AdekwatnoúÊ_kapita≥owa\_Beata_replacement\_KROK_4_COREP_ITS\Robocze\macro\formularze"
+MyFile = Dir(MyFolder & "\CMR - CJ_MINIMAL*.xlsx")
+If MyFile <> "" Then
+Set wb = Workbooks.Open(MyFolder & "\" & MyFile, UpdateLinks:=0)
+Else
+Exit Sub
+End If
+Beep
+CarryOn = MsgBox("Wybierz xxx_corep_its_wymogi za miesiπc sprawozdawczy")
+
+''''Otwieramy plik z ktÛrego uzupe≥niamy corep_ITS''''\
+Dim wbMe
+strPath = selectFile
+If strPath = "" Then Exit Sub
+Set wbMe = Workbooks.Open(strPath, UpdateLinks:=0)
+
+''''Usuwamy alerty o akutliazacji itp''''
+Application.ActiveWorkbook.UpdateLinks = xlUpdateLinksNever '2
+Application.DisplayAlerts = False
+Application.ScreenUpdating = False
+Application.AskToUpdateLinks = False
+
+''''Przenosimy arkusz Tabela_COREP do pliku xxx_corep_its''''
+Set wbStart = ThisWorkbook
+wbStart.Sheets("Tabela_COREP").Copy After:=wbMe.Sheets(1)
+
+''''Zmieniamy zakres danych Tabela_COREP na aktualny(zak≥adka corep) - ten ktÛry znajduje siÍ wpliku''''
+Set PivTbl = wbMe.Sheets("Tabela_COREP").PivotTables("Tabela przestawna1")
+PivTbl.ChangePivotCache ActiveWorkbook. _
+        PivotCaches.Create(SourceType:=xlDatabase, SourceData:="corep", _
+        Version:=6)
+
+''''Tworzymy arkusz z tabelπ przestawnπ dla papierÛw RES_MAT''''
+Dim sh1
+Dim sh2
+
+
+Set sh1 = wbMe.Sheets("papiery")
+  lr = sh1.Range("A" & Rows.Count).End(3).Row
+  ptver = 6
+  tbName = "RES_MAT_PIVOT"
+  Sheets.Add After:=Sheets(Sheets.Count)
+  Set sh2 = ActiveSheet
+  ActiveWorkbook.PivotCaches.Create(SourceType:=xlDatabase, _
+    SourceData:=sh1.Name & "!R1C4:R" & lr & "C12", Version:=ptver).CreatePivotTable _
+    TableDestination:=sh2.Name & "!R2C1", TableName:=tbName, _
+    DefaultVersion:=ptver
+  With sh2.PivotTables(tbName)
+    With .PivotFields("RES_MAT")
+      .Orientation = xlRowField
+      .Position = 1
+    End With
+    .AddDataField .PivotFields("WYCENA_PLN"), "Suma z WYCENA_PLN", xlSum
+  End With
+ sh2.Name = "res_mat"
+    wbMe.Sheets("res_mat").Move Before:=wbMe.Sheets(3)
+    
+''''tworzymy zakladke NPE''''
+Dim colDate
+Dim col2
+Dim lrData
+Dim lcData
+Dim arrData
+Dim n2
+Dim indResult
+Dim n1
+Dim shtResult
+    Const snSource = "kredyty"
+    Const colNameDate = "pmf_DATA_OTWARCIA_VINT"
+    Const colName2 = "CRD_RWG"
+    
+    colDate = Application.Match(colNameDate, Sheets(snSource).Rows(1), 0)
+    col2 = Application.Match(colName2, Sheets(snSource).Rows(1), 0)
+    If IsError(colDate) Or IsError(col2) Then Exit Sub
+    lrData = Sheets(snSource).Cells(Rows.Count, colDate).End(xlUp).Row
+    lcData = Sheets(snSource).Cells(1, Columns.Count).End(xlToLeft).Column
+    arrData = Sheets(snSource).Range("A1").Resize(lrData, lcData).Value
+    ReDim arrResult(1 To UBound(arrData), 1 To UBound(arrData, 2))
+    For n2 = 1 To UBound(arrData, 2)
+        arrResult(1, n2) = arrData(1, n2)
+    Next n2
+    indResult = 1
+    For n1 = 2 To UBound(arrData)
+        If arrData(n1, colDate) > DateSerial(2019, 4, 29) And (arrData(n1, col2) = 1 Or arrData(n1, col2) = 1.5) Then
+            indResult = indResult + 1 '
+            For n2 = 1 To UBound(arrData, 2)
+                arrResult(indResult, n2) = arrData(n1, n2)
+            Next n2
+        End If
+    Next n1
+    Set shtResult = Sheets.Add
+    shtResult.Range("A1").Resize(UBound(arrResult), UBound(arrResult, 2)).Value = arrResult
+    shtResult.Name = "NPE"
+    
+'''Usuwamy zbÍdne kolumny w stworzonej zak≥adce NPE - zostawiamy tylko te co potrzebujemy oraz odejmujemy miÍdzy sobπ daty'''
+    With wbMe.Sheets("NPE")
+        For currentColumn = .UsedRange.Columns.Count To 1 Step -1
+            columnHeading = .UsedRange.Cells(1, currentColumn).Value
+            Select Case columnHeading
+                Case "spr_DATA_SPR", "kl_NAZWA", "CRD_EKSP_PIER_DC_FIN", "CRD_KOR_DC_FIN", "CRD_KOR_DC_FIN", "CRD_RWG", "NEW_DEFAULT", "spr_DEFAULT_DWE"
+                Case Else
+                    If InStr(1, columnHeading, "DLP", vbBinaryCompare) = 0 Then
+                        If rDelete Is Nothing Then
+                            Set rDelete = .UsedRange.Cells(1, currentColumn)
+                        Else
+                            Set rDelete = Union(rDelete, .UsedRange.Cells(1, currentColumn))
+                        End If
+                    End If
+            End Select
+        Next
+    End With
+    If Not rDelete Is Nothing Then rDelete.EntireColumn.Delete
+  With wbMe.Sheets("NPE").Range("H2:H" & Range("A" & Rows.Count).End(xlUp).Row)
+      .Value = .Worksheet.Evaluate("if({1}," & .Offset(, -7).Address & "-" & .Offset(, -5).Address & ","""")")
+   End With
+    wbMe.Sheets("NPE").Range("H1").Value = "DIFFRENT"
+
+    
+''''Tworzymy zak≥adkÍ dla nowych DefaultÛw razem z tabelπ przestawnπ''''
+  Set sh_s = wbMe.Sheets("kredyty")
+    lr1 = sh_s.Cells(Rows.Count, "A").End(xlUp).Row
+    ptver1 = 6
+    tbName1 = "Tabela przestawna"
+    Sheets.Add After:=Sheets(Sheets.Count)
+    Set sh_d = ActiveSheet
+   
+    ActiveWorkbook.PivotCaches.Create(SourceType:=xlDatabase, _
+        SourceData:=sh_s.Name & "!R1C1:R" & lr1 & "C60", Version:=ptver1).CreatePivotTable _
+        TableDestination:=sh_d.Name & "!R3C1", TableName:=tbName1, _
+        DefaultVersion:=ptver1
+  
+sh_d.Name = "Default"
+wbMe.Sheets("Default").Move Before:=wbMe.Sheets(4)
+'''Suma Ekspozycji oraz Korekta dla RWG = 1.5 i new_def = 0'''
+    With sh_d.PivotTables(tbName1).PivotFields("CRD_RWG")
+        .Orientation = xlPageField
+        .Position = 1
+        .ClearAllFilters
+        .CurrentPage = 1.5
+    End With
+   
+    With sh_d.PivotTables(tbName1).PivotFields("NEW_DEFAULT")
+        .Orientation = xlPageField
+        .Position = 1
+        .ClearAllFilters
+        .CurrentPage = "(Wszystko)"
+    End With
+
+    With sh_d.PivotTables(tbName1)
+        .AddDataField .PivotFields("CRD_EKSP_PIER_DC_FIN"), "Suma z Ekspozycji dla RWG 1 DEF 0", xlSum
+        .AddDataField .PivotFields("CRD_KOR_DC_FIN"), "Suma z Korekty dla RWG 1 DEF 0", xlSum
+    End With
+wbMe.Sheets("Default").Range("A5:B5").Copy
+wbMe.Sheets("Default").Range("A7").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("Default").Range("A7") = Application.WorksheetFunction.Round(Sheets("Default").Range("A7"), 0)
+wbMe.Sheets("Default").Range("B7") = Application.WorksheetFunction.Round(Sheets("Default").Range("B7"), 0)
+
+'''Suma Ekspozycji oraz Korekta dla RWG = 1 i new_def = 0'''
+With sh_d.PivotTables(tbName1).PivotFields("CRD_RWG")
+        .Orientation = xlPageField
+        .Position = 1
+        .ClearAllFilters
+        .CurrentPage = 1
+    End With
+    With sh_d.PivotTables(tbName1).PivotFields("NEW_DEFAULT")
+        .Orientation = xlPageField
+        .Position = 1
+        .ClearAllFilters
+        .CurrentPage = "(Wszystko)"
+    End With
+    With sh_d.PivotTables(tbName1)
+        .AddDataField .PivotFields("CRD_EKSP_PIER_DC_FIN"), "Suma z Ekspozycji dla RWG 1.5 DEF 0", xlSum
+        .AddDataField .PivotFields("CRD_KOR_DC_FIN"), "Suma z Korekty dla RWG 1.5 DEF 0 ", xlSum
+    End With
+wbMe.Sheets("Default").Range("A5:B5").Copy
+wbMe.Sheets("Default").Range("A8").PasteSpecial Paste:=xlPasteValues
+Sheets("Default").Range("A8") = Application.WorksheetFunction.Round(Sheets("Default").Range("A8"), 0)
+Sheets("Default").Range("B8") = Application.WorksheetFunction.Round(Sheets("Default").Range("B8"), 0)
+
+'''Suma Ekspozycji oraz Korekta dla RWG = 1.5 i new_def = 1'''
+With sh_d.PivotTables(tbName1).PivotFields("CRD_RWG")
+        .Orientation = xlPageField
+        .Position = 1
+        .ClearAllFilters
+        .CurrentPage = 1.5
+    End With
+    With sh_d.PivotTables(tbName1).PivotFields("NEW_DEFAULT")
+        .Orientation = xlPageField
+        .Position = 1
+        .ClearAllFilters
+        .CurrentPage = 1
+    End With
+    With sh_d.PivotTables(tbName1)
+        .AddDataField .PivotFields("CRD_EKSP_PIER_DC_FIN"), "Suma z Ekspozycji dla RWG 1.5 DEF 1", xlSum
+        .AddDataField .PivotFields("CRD_KOR_DC_FIN"), "Suma z Korekty dla RWG 1.5 DEF 1", xlSum
+    End With
+wbMe.Sheets("Default").Range("A5:B5").Copy
+wbMe.Sheets("Default").Range("A9").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("Default").Range("A9") = Application.WorksheetFunction.Round(Sheets("Default").Range("A9"), 0)
+wbMe.Sheets("Default").Range("B9") = Application.WorksheetFunction.Round(Sheets("Default").Range("B9"), 0)
+
+'''Suma Ekspozycji oraz Korekta dla RWG = 1 i new_def = 1'''
+With sh_d.PivotTables(tbName1).PivotFields("CRD_RWG")
+        .Orientation = xlPageField
+        .Position = 1
+        .ClearAllFilters
+        .CurrentPage = 1
+    End With
+    With sh_d.PivotTables(tbName1).PivotFields("NEW_DEFAULT")
+        .Orientation = xlPageField
+        .Position = 1
+        .ClearAllFilters
+        .CurrentPage = 1
+    End With
+    With sh_d.PivotTables(tbName1)
+        .AddDataField .PivotFields("CRD_EKSP_PIER_DC_FIN"), "Suma z Ekspozycji dla RWG 1 DEF 1", xlSum
+        .AddDataField .PivotFields("CRD_KOR_DC_FIN"), "Suma z Korekty dla RWG 1 DEF 1", xlSum
+    End With
+wbMe.Sheets("Default").Range("A5:B5").Copy
+wbMe.Sheets("Default").Range("A10").PasteSpecial Paste:=xlPasteValues
+Sheets("Default").Range("A10") = Application.WorksheetFunction.Round(Sheets("Default").Range("A10"), 0)
+Sheets("Default").Range("A10") = Application.WorksheetFunction.Round(Sheets("Default").Range("A10"), 0)
+
+
+
+''Dodawanie kolorÛw do stworzonych zak≥adek''
+Set mySheets = wbMe.Sheets(Array("Default", "NPE", "res_mat"))
+For Each mySheet In mySheets
+    mySheet.Tab.Color = 255
+Next
+
+                                       '''''''''''''''''''''' Wykonujemy funkcje typu sumowanie/sumowanie warunkowe i filtrowanie ''''''''''''''''''''''
+            
+Dim pt As PivotTable
+Set pt = wbMe.Sheets("INFO").PivotTables("Tabela przestawna1")
+wbMe.Sheets("Tabela_COREP").Range("J4") = pt.GetPivotData("Suma z EXP_PIERWOTNA", "RODZAJ_AKTYW”W", "Instrumenty pochodne", "CRD_AC", "06", "CRD_CCF", 1, "CRD_RWG", 0).Value
+wbMe.Sheets("Tabela_COREP").Range("J5") = pt.GetPivotData("Suma z EXP_PIERWOTNA", "RODZAJ_AKTYW”W", "Pozosta≥e aktywa", "CRD_AC", "06", "CRD_CCF", 1, "CRD_RWG", 0).Value + Application.WorksheetFunction.SumIf(wbMe.Sheets("nostra").Range("A:A"), "PKO BP S.A.", wbMe.Sheets("nostra").Range("F:F"))
+''FUNKCJA 1 - kopiowanie sumy wycen w zak≥adce papiery + z nostra''
+wbMe.Sheets("papiery").Range("Q32").Copy
+wbMe.Sheets("papiery").Range("Q35").PasteSpecial Paste:=xlPasteValues
+Sheets("papiery").Range("A7") = Application.WorksheetFunction.Round(Sheets("papiery").Range("Q35"), 0)
+
+''FUNKCJA 2 - znajdywanie w kontrahent "NARODOWY BANK POLSKI" i sumowanie SALDO_PLN''
+With wbMe.Sheets("nostra")
+    .AutoFilterMode = False
+With .Range("A1:I11")
+        cIndex = Application.Match("SALDO_PLN", .Rows(1), 0)
+        If IsNumeric(cIndex) Then
+            .AutoFilter Field:=1, Criteria1:="Narodowy Bank Polski"
+          Intersect(.SpecialCells(xlCellTypeVisible), .Columns(cIndex)) _
+                .Copy Destination:=wbMe.Sheets("papiery").Range("Q42")
+                wbMe.Sheets("papiery").Range("Q36").Value = Application.WorksheetFunction.Round(Application.Sum(Intersect(.SpecialCells(xlCellTypeVisible), .Columns(cIndex))), 0)
+ With wbMe.Worksheets("papiery")
+        .Range("P35") = WorksheetFunction.Sum(.Range("Q35:Q37"))
+End With
+        End If
+    End With
+End With
+
+''FUNKCJA 3 - znajdywanie kolumny NOMINAL_MAX i sumowanie wartoúci w kolumnie''
+Dim Nominal_MAX
+Dim SumCriteria
+With wbMe.Worksheets("pochodne")
+Nominal_MAX = "NOMINAL_MAX"
+        LastRow = .Cells(Rows.Count, 1).End(xlUp).Row
+        LastCol = .Cells(1, Columns.Count).End(xlToLeft).Column
+        Set rTable = .Range(.Cells(1, 1), .Cells(LastRow, LastCol))
+        Set rCol = rTable.Rows(1).Find(What:=Nominal_MAX, LookIn:=xlValues, LookAt:=xlWhole)
+        If Not rCol Is Nothing Then
+            .Range("X35").Value = Application.WorksheetFunction.Round(Application.WorksheetFunction.Sum(rTable.Columns(rCol.Column)), 0)
+        Else
+            SumCriteria = CVErr(xlErrValue)
+        End If
+    End With
+
+''FUNKCJA 4 - znajdywanie kolumny KOSZT_ODTWORZENIA i sumowanie wartoúci w kolumnie''
+Dim KOSZT_ODTWORZENIA
+With wbMe.Worksheets("pochodne")
+KOSZT_ODTWORZENIA = "KOSZT_ODTWORZENIA"
+        LastRow = .Cells(Rows.Count, 1).End(xlUp).Row
+        LastCol = .Cells(1, Columns.Count).End(xlToLeft).Column
+        Set rTable = .Range(.Cells(1, 1), .Cells(LastRow, LastCol))
+        Set rCol = rTable.Rows(1).Find(What:=KOSZT_ODTWORZENIA, LookIn:=xlValues, LookAt:=xlWhole)
+        If Not rCol Is Nothing Then
+            .Range("U35").Value = Application.WorksheetFunction.Round(Application.WorksheetFunction.Sum(rTable.Columns(rCol.Column)), 0)
+        Else
+            SumCriteria = CVErr(xlErrValue)
+        End If
+    End With
+
+''FUNKCJA 5 - znajdywanie kolumny PPE_NEW i sumowanie wartoúci w kolumnie''
+Dim PPE_NEW
+With wbMe.Worksheets("pochodne")
+PPE_NEW = "PPE_new"
+        LastRow = .Cells(Rows.Count, 1).End(xlUp).Row
+        LastCol = .Cells(1, Columns.Count).End(xlToLeft).Column
+        Set rTable = .Range(.Cells(1, 1), .Cells(LastRow, LastCol))
+        Set rCol = rTable.Rows(1).Find(What:=PPE_NEW, LookIn:=xlValues, LookAt:=xlWhole)
+        If Not rCol Is Nothing Then
+            .Range("Z35").Value = Application.WorksheetFunction.Round(Application.WorksheetFunction.Sum(rTable.Columns(rCol.Column)), 0)
+        Else
+            SumCriteria = CVErr(xlErrValue)
+        End If
+    End With
+
+''FUNKCJA 6 - znajdywanie kolumny EXP_PIERWOATNA i sumowanie wartoúci w kolumnie''
+Dim EXP_PIERWOTNA
+With wbMe.Worksheets("pochodne")
+EXP_PIERWOTNA = "EXP_PIERWOTNA"
+        LastRow = .Cells(Rows.Count, 1).End(xlUp).Row
+        LastCol = .Cells(1, Columns.Count).End(xlToLeft).Column
+        Set rTable = .Range(.Cells(1, 1), .Cells(LastRow, LastCol))
+        Set rCol = rTable.Rows(1).Find(What:=EXP_PIERWOTNA, LookIn:=xlValues, LookAt:=xlWhole)
+        If Not rCol Is Nothing Then
+            .Range("AA35").Value = Application.WorksheetFunction.Round(Application.WorksheetFunction.Sum(rTable.Columns(rCol.Column)), 0)
+        Else
+            SumCriteria = CVErr(xlErrValue)
+        End If
+    End With
+
+''FUNKCJA 7 - znajdywanie kolumny WYCENA_po_CVA_DVA i sumowanie wartoúci w kolumnie >0''
+Dim WYCENA_po_CVA_DVA
+With wbMe.Sheets("pochodne")
+    WYCENA_po_CVA_DVA = "WYCENA_po_CVA_DVA"
+    LastRow = .Cells(Rows.Count, 1).End(xlUp).Row
+    LastCol = .Cells(1, Columns.Count).End(xlToLeft).Column
+    Set rTable = .Range(.Cells(1, 1), .Cells(LastRow, LastCol))
+    Set rCol = rTable.Rows(1).Find(What:=WYCENA_po_CVA_DVA, LookIn:=xlValues, LookAt:=xlWhole)
+    If Not rCol Is Nothing Then
+        .Range("T35").Value = Application.WorksheetFunction.Round(Application.WorksheetFunction.SumIf(rTable.Columns(rCol.Column), ">0", rTable.Columns(rCol.Column)), 0)
+    Else
+        SumCriteria = CVErr(xlErrValue)
+    End If
+  End With
+
+''FUNKCJA 8 - znajdywanie kolumny WYCENA_po_CVA_DVA i sumowanie wartoúci w kolumnie <0'
+With wbMe.Sheets("pochodne")
+    WYCENA_po_CVA_DVA = "WYCENA_po_CVA_DVA"
+    LastRow = .Cells(Rows.Count, 1).End(xlUp).Row
+    LastCol = .Cells(1, Columns.Count).End(xlToLeft).Column
+    Set rTable = .Range(.Cells(1, 1), .Cells(LastRow, LastCol))
+    Set rCol = rTable.Rows(1).Find(What:=WYCENA_po_CVA_DVA, LookIn:=xlValues, LookAt:=xlWhole)
+    If Not rCol Is Nothing Then
+        .Range("T37").Value = Application.WorksheetFunction.Round(Application.WorksheetFunction.SumIf(rTable.Columns(rCol.Column), "<0", rTable.Columns(rCol.Column)), 0)
+    Else
+        SumCriteria = CVErr(xlErrValue)
+    End If
+  End With
+ Dim cl As Range
+Set cl = wbMe.Worksheets("pochodne").Range("T37")
+If cl.Value < 0 Then
+   cl.Value = -cl.Value
+End If
+
+''FUNKCJA 9 - liczenie liczby pozycji IRS''
+Dim IRS
+With wbMe.Sheets("pochodne")
+        colHead = "INSTRUMENT"
+        IRS = "IRS"
+        LastRow = .Cells(Rows.Count, 1).End(xlUp).Row
+        LastCol = .Cells(1, Columns.Count).End(xlToLeft).Column
+        Set rTable = .Range(.Cells(1, 1), .Cells(LastRow, LastCol))
+        Set rCol = rTable.Rows(1).Find(What:=colHead, LookIn:=xlValues, LookAt:=xlWhole)
+        If Not rCol Is Nothing Then
+            .Range("T45").Value = Application.WorksheetFunction.Round(Application.CountIf(rCol.EntireColumn, IRS), 0)
+        Else
+            SumCriteria = CVErr(xlErrValue)
+            End If
+        End With
+        
+''FUNKCJA 10 - liczenie liczby pozycji FX_FORWARD''
+Dim FX_FORWARD
+With wbMe.Sheets("pochodne")
+        colHead = "INSTRUMENT"
+        FX_FORWARD = "FX_FORWARD"
+        LastRow = .Cells(Rows.Count, 1).End(xlUp).Row
+        LastCol = .Cells(1, Columns.Count).End(xlToLeft).Column
+        Set rTable = .Range(.Cells(1, 1), .Cells(LastRow, LastCol))
+        Set rCol = rTable.Rows(1).Find(What:=colHead, LookIn:=xlValues, LookAt:=xlWhole)
+        If Not rCol Is Nothing Then
+            .Range("T46").Value = Application.WorksheetFunction.Round(Application.CountIf(rCol.EntireColumn, FX_FORWARD), 0)
+        Else
+            SumCriteria = CVErr(xlErrValue)
+            End If
+        End With
+        
+''FUNKCJA 11 - liczenie liczby pozycji FX_FORWARD oraz CIRS''
+Dim CIRS
+With wbMe.Sheets("pochodne")
+        colHead = "INSTRUMENT"
+        FX_FORWARD = "FX_FORWARD"
+        CIRS = "CIRS"
+        LastRow = .Cells(Rows.Count, 1).End(xlUp).Row
+        LastCol = .Cells(1, Columns.Count).End(xlToLeft).Column
+        Set rTable = .Range(.Cells(1, 1), .Cells(LastRow, LastCol))
+        Set rCol = rTable.Rows(1).Find(What:=colHead, LookIn:=xlValues, LookAt:=xlWhole)
+        If Not rCol Is Nothing Then
+            .Range("T47").Value = Application.WorksheetFunction.Round(Application.CountIf(rCol.EntireColumn, FX_FORWARD), 0) + Application.WorksheetFunction.Round(Application.CountIf(rCol.EntireColumn, CIRS), 0)
+        Else
+            SumCriteria = CVErr(xlErrValue)
+            End If
+        End With
+''FUNKCJA 12 - znajdywanie pozycji IRS w kolumnie ISNTRUMENTY i sumowanie WYCENA_po_CVA_DVA > 0''
+With wbMe.Sheets("pochodne")
+If .AutoFilterMode Then .AutoFilterMode = False
+    WYCENA_po_CVA_DVA = "WYCENA_po_CVA_DVA"
+    IRS = "INSTRUMENT"
+    LastRow = .Cells(Rows.Count, 1).End(xlUp).Row
+    LastCol = .Cells(1, Columns.Count).End(xlToLeft).Column
+    Set rTable = .Range(.Cells(1, 1), .Cells(LastRow, LastCol))
+    Set rCol = rTable.Rows(1).Find(What:=WYCENA_po_CVA_DVA, LookIn:=xlValues, LookAt:=xlWhole)
+    Set rCol1 = rTable.Rows(1).Find(What:=IRS, LookIn:=xlValues, LookAt:=xlWhole)
+    If Not rCol Is Nothing Then
+        .Range("T71").Value = Application.WorksheetFunction.Round(Application.WorksheetFunction.SumIfs(rTable.Columns(rCol.Column), rTable.Columns(rCol.Column), ">0", rTable.Columns(rCol1.Column), "IRS"), 0)
+    Else
+        SumCriteria = CVErr(xlErrValue)
+    End If
+End With
+
+
+''FUNKCJA 12 - znajdywanie pozycji IRS w kolumnie ISNTRUMENTY i sumowanie WYCENA_po_CVA_DVA < 0''
+With wbMe.Sheets("pochodne")
+If .AutoFilterMode Then .AutoFilterMode = False
+    WYCENA_po_CVA_DVA = "WYCENA_po_CVA_DVA"
+    IRS = "INSTRUMENT"
+    LastRow = .Cells(Rows.Count, 1).End(xlUp).Row
+    LastCol = .Cells(1, Columns.Count).End(xlToLeft).Column
+    Set rTable = .Range(.Cells(1, 1), .Cells(LastRow, LastCol))
+    Set rCol = rTable.Rows(1).Find(What:=WYCENA_po_CVA_DVA, LookIn:=xlValues, LookAt:=xlWhole)
+    Set rCol1 = rTable.Rows(1).Find(What:=IRS, LookIn:=xlValues, LookAt:=xlWhole)
+    If Not rCol Is Nothing Then
+        .Range("T72").Value = Application.WorksheetFunction.Round(Application.WorksheetFunction.SumIfs(rTable.Columns(rCol.Column), rTable.Columns(rCol.Column), "<0", rTable.Columns(rCol1.Column), "IRS"), 0)
+    Else
+        SumCriteria = CVErr(xlErrValue)
+    End If
+End With
+Set cl = wbMe.Worksheets("pochodne").Range("T72")
+If cl.Value < 0 Then
+   cl.Value = -cl.Value
+End If
+
+''FUNKCJA 13 - znajdywanie pozycji IRS w kolumnie ISNTRUMENTY i sumowanie NOMINAL_MAX''
+
+With wbMe.Sheets("pochodne")
+IRS = "INSTRUMENT"
+If .AutoFilterMode Then .AutoFilterMode = False
+    Nominal_MAX = "NOMINAL_MAX"
+    LastRow = .Cells(Rows.Count, 1).End(xlUp).Row
+    LastCol = .Cells(1, Columns.Count).End(xlToLeft).Column
+    Set rTable = .Range(.Cells(1, 1), .Cells(LastRow, LastCol))
+    Set rCol = rTable.Rows(1).Find(What:=Nominal_MAX, LookIn:=xlValues, LookAt:=xlWhole)
+    Set rCol1 = rTable.Rows(1).Find(What:=IRS, LookIn:=xlValues, LookAt:=xlWhole)
+    If Not rCol Is Nothing Then
+        .Range("S35").Value = Application.WorksheetFunction.Round(Application.WorksheetFunction.SumIfs(rTable.Columns(rCol.Column), rTable.Columns(rCol.Column), "<>0", rTable.Columns(rCol1.Column), "IRS"), 0)
+    Else
+        SumCriteria = CVErr(xlErrValue)
+    End If
+End With
+
+''FUNKCJA 14 - znajdywanie pozycji IRS w kolumnie ISNTRUMENTY i sumowanie PPE_NEW''
+With wbMe.Sheets("pochodne")
+If .AutoFilterMode Then .AutoFilterMode = False
+    PPE_NEW = "PPE_NEW"
+    IRS = "INSTRUMENT"
+    LastRow = .Cells(Rows.Count, 1).End(xlUp).Row
+    LastCol = .Cells(1, Columns.Count).End(xlToLeft).Column
+    Set rTable = .Range(.Cells(1, 1), .Cells(LastRow, LastCol))
+    Set rCol = rTable.Rows(1).Find(What:=PPE_NEW, LookIn:=xlValues, LookAt:=xlWhole)
+    Set rCol1 = rTable.Rows(1).Find(What:=IRS, LookIn:=xlValues, LookAt:=xlWhole)
+    If Not rCol Is Nothing Then
+        .Range("B38").Value = Application.WorksheetFunction.Round(Application.WorksheetFunction.SumIfs(rTable.Columns(rCol.Column), rTable.Columns(rCol.Column), "<>0", rTable.Columns(rCol1.Column), "IRS"), 0)
+
+    Else
+        SumCriteria = CVErr(xlErrValue)
+    End If
+End With
+
+Set cl = wbMe.Worksheets("pochodne").Range("B38")
+If cl.Value < 0 Then
+   cl.Delete
+End If
+
+''FUNKCJA 15 - znajdywanie pozycji FX_FORWARD w kolumnie ISNTRUMENTY i sumowanie PPE_NEW''
+
+With wbMe.Sheets("pochodne")
+If .AutoFilterMode Then .AutoFilterMode = False
+    PPE_NEW = "PPE_NEW"
+    FX_FORWARD = "INSTRUMENT"
+    LastRow = .Cells(Rows.Count, 1).End(xlUp).Row
+    LastCol = .Cells(1, Columns.Count).End(xlToLeft).Column
+    Set rTable = .Range(.Cells(1, 1), .Cells(LastRow, LastCol))
+    Set rCol = rTable.Rows(1).Find(What:=PPE_NEW, LookIn:=xlValues, LookAt:=xlWhole)
+    Set rCol1 = rTable.Rows(1).Find(What:=FX_FORWARD, LookIn:=xlValues, LookAt:=xlWhole)
+    If Not rCol Is Nothing Then
+        .Range("B42").Value = Application.WorksheetFunction.Round(Application.WorksheetFunction.SumIfs(rTable.Columns(rCol.Column), rTable.Columns(rCol.Column), "<>0", rTable.Columns(rCol1.Column), "FX_FORWARD"), 0)
+
+    Else
+        SumCriteria = CVErr(xlErrValue)
+    End If
+End With
+
+Set cl = wbMe.Worksheets("pochodne").Range("B42")
+If cl.Value < 0 Then
+   cl.Delete
+End If
+
+
+''FUNKCJA 16 - znajdywanie pozycji FX_FORWARD oraz CIRS w kolumnie ISNTRUMENTY i sumowanie PPE_NEW''
+
+With wbMe.Sheets("pochodne")
+If .AutoFilterMode Then .AutoFilterMode = False
+    PPE_NEW = "PPE_NEW"
+    CIRS = "INSTRUMENT"
+    LastRow = .Cells(Rows.Count, 1).End(xlUp).Row
+    LastCol = .Cells(1, Columns.Count).End(xlToLeft).Column
+    Set rTable = .Range(.Cells(1, 1), .Cells(LastRow, LastCol))
+    Set rCol = rTable.Rows(1).Find(What:=PPE_NEW, LookIn:=xlValues, LookAt:=xlWhole)
+    Set rCol1 = rTable.Rows(1).Find(What:=CIRS, LookIn:=xlValues, LookAt:=xlWhole)
+    If Not rCol Is Nothing Then
+        .Range("B65").Value = Application.WorksheetFunction.Round(Application.WorksheetFunction.SumIfs(rTable.Columns(rCol.Column), rTable.Columns(rCol.Column), "<>0", rTable.Columns(rCol1.Column), "CIRS"), 0)
+    Else
+        SumCriteria = CVErr(xlErrValue)
+    End If
+End With
+With wbMe.Sheets("pochodne")
+If .AutoFilterMode Then .AutoFilterMode = False
+    PPE_NEW = "PPE_NEW"
+    FX_FORWARD = "INSTRUMENT"
+    LastRow = .Cells(Rows.Count, 1).End(xlUp).Row
+    LastCol = .Cells(1, Columns.Count).End(xlToLeft).Column
+    Set rTable = .Range(.Cells(1, 1), .Cells(LastRow, LastCol))
+    Set rCol = rTable.Rows(1).Find(What:=PPE_NEW, LookIn:=xlValues, LookAt:=xlWhole)
+    Set rCol1 = rTable.Rows(1).Find(What:=FX_FORWARD, LookIn:=xlValues, LookAt:=xlWhole)
+    If Not rCol Is Nothing Then
+        .Range("B66").Value = Application.WorksheetFunction.Round(Application.WorksheetFunction.SumIfs(rTable.Columns(rCol.Column), rTable.Columns(rCol.Column), "<>0", rTable.Columns(rCol1.Column), "FX_FORWARD"), 0)
+    Else
+        SumCriteria = CVErr(xlErrValue)
+    End If
+End With
+
+wbMe.Sheets("pochodne").Range("B67") = wbMe.Sheets("pochodne").Range("B65") + wbMe.Sheets("pochodne").Range("B66")
+If wbMe.Sheets("pochodne").Range("B66") < 0 Then
+wbMe.Sheets("pochodne").Range("B67") = wbMe.Sheets("pochodne").Range("B65")
+Else
+wbMe.Sheets("pochodne").Range("B67") = wbMe.Sheets("pochodne").Range("B65") + wbMe.Sheets("pochodne").Range("B66")
+End If
+''FUNKCJA 17 - znajdywanie pozycji FX_FORWARD oraz CIRS w kolumnie ISNTRUMENTY i sumowanie WYCENA_po_CVA_DVA >0''
+
+With wbMe.Sheets("pochodne")
+If .AutoFilterMode Then .AutoFilterMode = False
+    WYCENA_po_CVA_DVA = "WYCENA_po_CVA_DVA"
+    CIRS = "INSTRUMENT"
+    LastRow = .Cells(Rows.Count, 1).End(xlUp).Row
+    LastCol = .Cells(1, Columns.Count).End(xlToLeft).Column
+    Set rTable = .Range(.Cells(1, 1), .Cells(LastRow, LastCol))
+    Set rCol = rTable.Rows(1).Find(What:=WYCENA_po_CVA_DVA, LookIn:=xlValues, LookAt:=xlWhole)
+    Set rCol1 = rTable.Rows(1).Find(What:=CIRS, LookIn:=xlValues, LookAt:=xlWhole)
+    If Not rCol Is Nothing Then
+        .Range("T55").Value = Application.WorksheetFunction.Round(Application.WorksheetFunction.SumIfs(rTable.Columns(rCol.Column), rTable.Columns(rCol.Column), ">0", rTable.Columns(rCol1.Column), "CIRS"), 0)
+    Else
+        SumCriteria = CVErr(xlErrValue)
+    End If
+End With
+With wbMe.Sheets("pochodne")
+If .AutoFilterMode Then .AutoFilterMode = False
+    WYCENA_po_CVA_DVA = "WYCENA_po_CVA_DVA"
+    FX_FORWARD = "INSTRUMENT"
+    LastRow = .Cells(Rows.Count, 1).End(xlUp).Row
+    LastCol = .Cells(1, Columns.Count).End(xlToLeft).Column
+    Set rTable = .Range(.Cells(1, 1), .Cells(LastRow, LastCol))
+    Set rCol = rTable.Rows(1).Find(What:=WYCENA_po_CVA_DVA, LookIn:=xlValues, LookAt:=xlWhole)
+    Set rCol2 = rTable.Rows(1).Find(What:=FX_FORWARD, LookIn:=xlValues, LookAt:=xlWhole)
+    If Not rCol Is Nothing Then
+        .Range("T56").Value = Application.WorksheetFunction.Round(Application.WorksheetFunction.SumIfs(rTable.Columns(rCol.Column), rTable.Columns(rCol.Column), ">0", rTable.Columns(rCol1.Column), "FX_FORWARD"), 0)
+    Else
+        SumCriteria = CVErr(xlErrValue)
+    End If
+End With
+wbMe.Sheets("pochodne").Range("T57") = wbMe.Sheets("pochodne").Range("T55") + wbMe.Sheets("pochodne").Range("T56")
+Set cl = wbMe.Worksheets("pochodne").Range("T57")
+If cl.Value < 0 Then
+   cl.Value = -cl.Value
+End If
+
+''FUNKCJA 18 - znajdywanie pozycji FX_FORWARD oraz CIRS w kolumnie ISNTRUMENTY i sumowanie WYCENA_po_CVA_DVA <0''
+With wbMe.Sheets("pochodne")
+If .AutoFilterMode Then .AutoFilterMode = False
+    WYCENA_po_CVA_DVA = "WYCENA_po_CVA_DVA"
+    CIRS = "INSTRUMENT"
+    LastRow = .Cells(Rows.Count, 1).End(xlUp).Row
+    LastCol = .Cells(1, Columns.Count).End(xlToLeft).Column
+    Set rTable = .Range(.Cells(1, 1), .Cells(LastRow, LastCol))
+    Set rCol = rTable.Rows(1).Find(What:=WYCENA_po_CVA_DVA, LookIn:=xlValues, LookAt:=xlWhole)
+    Set rCol1 = rTable.Rows(1).Find(What:=CIRS, LookIn:=xlValues, LookAt:=xlWhole)
+    If Not rCol Is Nothing Then
+        .Range("T60").Value = Application.WorksheetFunction.Round(Application.WorksheetFunction.SumIfs(rTable.Columns(rCol.Column), rTable.Columns(rCol.Column), "<0", rTable.Columns(rCol1.Column), "CIRS"), 0)
+    Else
+        SumCriteria = CVErr(xlErrValue)
+    End If
+End With
+With wbMe.Sheets("pochodne")
+If .AutoFilterMode Then .AutoFilterMode = False
+    WYCENA_po_CVA_DVA = "WYCENA_po_CVA_DVA"
+    FX_FORWARD = "INSTRUMENT"
+    LastRow = .Cells(Rows.Count, 1).End(xlUp).Row
+    LastCol = .Cells(1, Columns.Count).End(xlToLeft).Column
+    Set rTable = .Range(.Cells(1, 1), .Cells(LastRow, LastCol))
+    Set rCol = rTable.Rows(1).Find(What:=WYCENA_po_CVA_DVA, LookIn:=xlValues, LookAt:=xlWhole)
+    Set rCol1 = rTable.Rows(1).Find(What:=FX_FORWARD, LookIn:=xlValues, LookAt:=xlWhole)
+    If Not rCol Is Nothing Then
+        .Range("T61").Value = Application.WorksheetFunction.Round(Application.WorksheetFunction.SumIfs(rTable.Columns(rCol.Column), rTable.Columns(rCol.Column), "<0", rTable.Columns(rCol1.Column), "FX_FORWARD"), 0)
+    Else
+        SumCriteria = CVErr(xlErrValue)
+    End If
+End With
+wbMe.Sheets("pochodne").Range("T62") = wbMe.Sheets("pochodne").Range("T60") + wbMe.Sheets("pochodne").Range("T61")
+Set cl = wbMe.Worksheets("pochodne").Range("T62")
+If cl.Value < 0 Then
+   cl.Value = -cl.Value
+End If
+
+''FUNKCJA 19 - znajdywanie pozycji FX_FORWARD oraz CIRS w kolumnie ISNTRUMENTY i sumowanie Nominal_MAX''
+With wbMe.Sheets("pochodne")
+If .AutoFilterMode Then .AutoFilterMode = False
+    Nominal_MAX = "Nominal_MAX"
+    CIRS = "INSTRUMENT"
+    LastRow = .Cells(Rows.Count, 1).End(xlUp).Row
+    LastCol = .Cells(1, Columns.Count).End(xlToLeft).Column
+    Set rTable = .Range(.Cells(1, 1), .Cells(LastRow, LastCol))
+    Set rCol = rTable.Rows(1).Find(What:=Nominal_MAX, LookIn:=xlValues, LookAt:=xlWhole)
+    Set rCol1 = rTable.Rows(1).Find(What:=CIRS, LookIn:=xlValues, LookAt:=xlWhole)
+    If Not rCol Is Nothing Then
+        .Range("B50").Value = Application.WorksheetFunction.Round(Application.WorksheetFunction.SumIfs(rTable.Columns(rCol.Column), rTable.Columns(rCol.Column), "<>0", rTable.Columns(rCol1.Column), "CIRS"), 0)
+    Else
+        SumCriteria = CVErr(xlErrValue)
+    End If
+End With
+With wbMe.Sheets("pochodne")
+If .AutoFilterMode Then .AutoFilterMode = False
+    Nominal_MAX = "Nominal_MAX"
+    FX_FORWARD = "INSTRUMENT"
+    LastRow = .Cells(Rows.Count, 1).End(xlUp).Row
+    LastCol = .Cells(1, Columns.Count).End(xlToLeft).Column
+    Set rTable = .Range(.Cells(1, 1), .Cells(LastRow, LastCol))
+    Set rCol = rTable.Rows(1).Find(What:=Nominal_MAX, LookIn:=xlValues, LookAt:=xlWhole)
+    Set rCol1 = rTable.Rows(1).Find(What:=CIRS, LookIn:=xlValues, LookAt:=xlWhole)
+    If Not rCol Is Nothing Then
+        .Range("B51").Value = Application.WorksheetFunction.Round(Application.WorksheetFunction.SumIfs(rTable.Columns(rCol.Column), rTable.Columns(rCol.Column), "<>0", rTable.Columns(rCol1.Column), "FX_FORWARD"), 0)
+    Else
+        SumCriteria = CVErr(xlErrValue)
+    End If
+End With
+wbMe.Sheets("pochodne").Range("B52") = wbMe.Sheets("pochodne").Range("B51") + wbMe.Sheets("pochodne").Range("B50")
+Set cl = wbMe.Worksheets("pochodne").Range("B52")
+If cl.Value < 0 Then
+   cl.Value = -cl.Value
+End If
+
+''FUNKCJA 20 - znajdywanie pozycji FX_FORWARD w kolumnie ISNTRUMENTY i sumowanie Nominal_MAX''
+With wbMe.Sheets("pochodne")
+If .AutoFilterMode Then .AutoFilterMode = False
+    Nominal_MAX = "Nominal_MAX"
+    FX_FORWARD = "INSTRUMENT"
+    LastRow = .Cells(Rows.Count, 1).End(xlUp).Row
+    LastCol = .Cells(1, Columns.Count).End(xlToLeft).Column
+    Set rTable = .Range(.Cells(1, 1), .Cells(LastRow, LastCol))
+    Set rCol = rTable.Rows(1).Find(What:=Nominal_MAX, LookIn:=xlValues, LookAt:=xlWhole)
+    Set rCol1 = rTable.Rows(1).Find(What:=FX_FORWARD, LookIn:=xlValues, LookAt:=xlWhole)
+    If Not rCol Is Nothing Then
+        .Range("T40").Value = Application.WorksheetFunction.Round(Application.WorksheetFunction.SumIfs(rTable.Columns(rCol.Column), rTable.Columns(rCol.Column), "<>0", rTable.Columns(rCol1.Column), "FX_FORWARD"), 0)
+     Else
+        SumCriteria = CVErr(xlErrValue)
+    End If
+End With
+
+''FUNKCJA 21 - znajdywanie pozycji FX_FORWARD w kolumnie ISNTRUMENTY i sumowanie WYCENA_po_CVA_DVA >0''
+Set wbMe = ActiveWorkbook
+FX_FORWARD = "INSTRUMENT"
+
+With wbMe.Sheets("pochodne")
+If .AutoFilterMode Then .AutoFilterMode = False
+    WYCENA_po_CVA_DVA = "WYCENA_po_CVA_DVA"
+    LastRow = .Cells(Rows.Count, 1).End(xlUp).Row
+    LastCol = .Cells(1, Columns.Count).End(xlToLeft).Column
+    Set rTable = .Range(.Cells(1, 1), .Cells(LastRow, LastCol))
+    Set rCol = rTable.Rows(1).Find(What:=WYCENA_po_CVA_DVA, LookIn:=xlValues, LookAt:=xlWhole)
+    Set rCol1 = rTable.Rows(1).Find(What:=IRS, LookIn:=xlValues, LookAt:=xlWhole)
+    If Not rCol Is Nothing Then
+        .Range("T41").Value = Application.WorksheetFunction.Round(Application.WorksheetFunction.SumIfs(rTable.Columns(rCol.Column), rTable.Columns(rCol.Column), ">0", rTable.Columns(rCol1.Column), "FX_FORWARD"), 0)
+    Else
+        SumCriteria = CVErr(xlErrValue)
+    End If
+End With
+
+''FUNKCJA 22 - Podajemy sume dla Ekspozycji dla NPE, gdzie CDR_RWG =1.5 i DIFFRENT >365''
+With wbMe.Sheets("NPE")
+        If .AutoFilterMode Then .AutoFilterMode = False
+        Set rTable = .Range(.Cells(1, 1), .Cells(.Cells(Rows.Count, 1).End(xlUp).Row, .Cells(1, Columns.Count).End(xlToLeft).Column))
+        .Range("J3").Value = Application.WorksheetFunction.Round(Application.SumIfs(rTable.Rows(1).Find(What:="CRD_EKSP_PIER_DC_FIN", LookIn:=xlValues, LookAt:=xlWhole).EntireColumn, _
+                                                 rTable.Rows(1).Find(What:="CRD_RWG", LookIn:=xlValues, LookAt:=xlWhole).EntireColumn, "1.5", _
+                                                 rTable.Rows(1).Find(What:="DIFFRENT", LookIn:=xlValues, LookAt:=xlWhole).EntireColumn, ">365"), 0)
+    End With
+    
+''FUNKCJA 23 - Podajemy sume dla Ekspozycji dla NPE, gdzie CDR_RWG =1 i DIFFRENT >365''
+With wbMe.Sheets("NPE")
+        If .AutoFilterMode Then .AutoFilterMode = False
+        Set rTable = .Range(.Cells(1, 1), .Cells(.Cells(Rows.Count, 1).End(xlUp).Row, .Cells(1, Columns.Count).End(xlToLeft).Column))
+        .Range("J4").Value = Application.WorksheetFunction.Round(Application.SumIfs(rTable.Rows(1).Find(What:="CRD_EKSP_PIER_DC_FIN", LookIn:=xlValues, LookAt:=xlWhole).EntireColumn, _
+                                                 rTable.Rows(1).Find(What:="CRD_RWG", LookIn:=xlValues, LookAt:=xlWhole).EntireColumn, "1", _
+                                                 rTable.Rows(1).Find(What:="DIFFRENT", LookIn:=xlValues, LookAt:=xlWhole).EntireColumn, ">365"), 0)
+    End With
+    
+''FUNKCJA 24 - Podajemy sume dla Ekspozycji dla NPE, gdzie CDR_RWG =1.5 i DIFFRENT <365''
+With wbMe.Sheets("NPE")
+        If .AutoFilterMode Then .AutoFilterMode = False
+        Set rTable = .Range(.Cells(1, 1), .Cells(.Cells(Rows.Count, 1).End(xlUp).Row, .Cells(1, Columns.Count).End(xlToLeft).Column))
+        .Range("J5").Value = Application.WorksheetFunction.Round(Application.SumIfs(rTable.Rows(1).Find(What:="CRD_EKSP_PIER_DC_FIN", LookIn:=xlValues, LookAt:=xlWhole).EntireColumn, _
+                                                 rTable.Rows(1).Find(What:="CRD_RWG", LookIn:=xlValues, LookAt:=xlWhole).EntireColumn, "1", _
+                                                 rTable.Rows(1).Find(What:="DIFFRENT", LookIn:=xlValues, LookAt:=xlWhole).EntireColumn, "<365"), 0)
+    End With
+    
+''FUNKCJA 25 - Podajemy sume dla Ekspozycji dla NPE, gdzie CDR_RWG >1 i DIFFRENT <365''
+With wbMe.Sheets("NPE")
+        If .AutoFilterMode Then .AutoFilterMode = False
+        Set rTable = .Range(.Cells(1, 1), .Cells(.Cells(Rows.Count, 1).End(xlUp).Row, .Cells(1, Columns.Count).End(xlToLeft).Column))
+        .Range("J6").Value = Application.WorksheetFunction.Round(Application.SumIfs(rTable.Rows(1).Find(What:="CRD_EKSP_PIER_DC_FIN", LookIn:=xlValues, LookAt:=xlWhole).EntireColumn, _
+                                                 rTable.Rows(1).Find(What:="CRD_RWG", LookIn:=xlValues, LookAt:=xlWhole).EntireColumn, "1.5", _
+                                                 rTable.Rows(1).Find(What:="DIFFRENT", LookIn:=xlValues, LookAt:=xlWhole).EntireColumn, "<365"), 0)
+    End With
+    
+''FUNKCJA 26 - Podajemy sume dla Korekt dla NPE, gdzie CDR_RWG =1 i DIFFRENT <365''
+With wbMe.Sheets("NPE")
+        If .AutoFilterMode Then .AutoFilterMode = False
+        Set rTable = .Range(.Cells(1, 1), .Cells(.Cells(Rows.Count, 1).End(xlUp).Row, .Cells(1, Columns.Count).End(xlToLeft).Column))
+        .Range("K3").Value = Application.WorksheetFunction.Round(Application.SumIfs(rTable.Rows(1).Find(What:="CRD_KOR_DC_FIN", LookIn:=xlValues, LookAt:=xlWhole).EntireColumn, _
+                                                 rTable.Rows(1).Find(What:="CRD_RWG", LookIn:=xlValues, LookAt:=xlWhole).EntireColumn, "1", _
+                                                 rTable.Rows(1).Find(What:="DIFFRENT", LookIn:=xlValues, LookAt:=xlWhole).EntireColumn, "<=365"), 0)
+    End With
+    
+''FUNKCJA 27 - Podajemy sume dla Korekt dla NPE, gdzie CDR_RWG =1.5 i DIFFRENT <365''
+With wbMe.Sheets("NPE")
+        If .AutoFilterMode Then .AutoFilterMode = False
+        Set rTable = .Range(.Cells(1, 1), .Cells(.Cells(Rows.Count, 1).End(xlUp).Row, .Cells(1, Columns.Count).End(xlToLeft).Column))
+        .Range("K4").Value = Application.WorksheetFunction.Round(Application.SumIfs(rTable.Rows(1).Find(What:="CRD_KOR_DC_FIN", LookIn:=xlValues, LookAt:=xlWhole).EntireColumn, _
+                                                 rTable.Rows(1).Find(What:="CRD_RWG", LookIn:=xlValues, LookAt:=xlWhole).EntireColumn, "1.5", _
+                                                 rTable.Rows(1).Find(What:="DIFFRENT", LookIn:=xlValues, LookAt:=xlWhole).EntireColumn, "<=365"), 0)
+
+    End With
+    
+''FUNKCJA 28 - Podajemy sume dla Korekt dla NPE, gdzie CDR_RWG =1.5 i DIFFRENT <365''
+With wbMe.Sheets("NPE")
+        If .AutoFilterMode Then .AutoFilterMode = False
+        Set rTable = .Range(.Cells(1, 1), .Cells(.Cells(Rows.Count, 1).End(xlUp).Row, .Cells(1, Columns.Count).End(xlToLeft).Column))
+        .Range("K5").Value = Application.WorksheetFunction.Round(Application.SumIfs(rTable.Rows(1).Find(What:="CRD_KOR_DC_FIN", LookIn:=xlValues, LookAt:=xlWhole).EntireColumn, _
+                                                 rTable.Rows(1).Find(What:="CRD_RWG", LookIn:=xlValues, LookAt:=xlWhole).EntireColumn, "1", _
+                                                 rTable.Rows(1).Find(What:="DIFFRENT", LookIn:=xlValues, LookAt:=xlWhole).EntireColumn, ">365"), 0)
+
+    End With
+    
+''FUNKCJA 29 - Podajemy sume dla Korekt dla NPE, gdzie CDR_RWG =1.5 i DIFFRENT <365''
+With wbMe.Sheets("NPE")
+        If .AutoFilterMode Then .AutoFilterMode = False
+        Set rTable = .Range(.Cells(1, 1), .Cells(.Cells(Rows.Count, 1).End(xlUp).Row, .Cells(1, Columns.Count).End(xlToLeft).Column))
+        .Range("K6").Value = Application.WorksheetFunction.Round(Application.SumIfs(rTable.Rows(1).Find(What:="CRD_KOR_DC_FIN", LookIn:=xlValues, LookAt:=xlWhole).EntireColumn, _
+                                                 rTable.Rows(1).Find(What:="CRD_RWG", LookIn:=xlValues, LookAt:=xlWhole).EntireColumn, "1.5", _
+                                                 rTable.Rows(1).Find(What:="DIFFRENT", LookIn:=xlValues, LookAt:=xlWhole).EntireColumn, ">365"), 0)
+
+    End With
+
+
+   
+                                                              '''''''''''''''''''''' Uzupe≥niamy CMR_CJ_MINIMAL ''''''''''''''''''''''
+                                                              
+ 'C_0700_002'
+wbMe.Sheets("Tabela_COREP").Range("F4").Copy
+wb.Sheets("C_0700_0002").Range("G17").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("Tabela_COREP").Range("F7").Copy
+wb.Sheets("C_0700_0002").Range("G26").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("Tabela_COREP").Range("H7").Copy
+wb.Sheets("C_0700_0002").Range("T26").PasteSpecial Paste:=xlPasteValues
+
+'C_0700_0007'
+wbMe.Sheets("Tabela_COREP").Range("J5").Copy
+wb.Sheets("C_0700_0007").Range("G17").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("Tabela_COREP").Range("J4").Copy
+wb.Sheets("C_0700_0007").Range("G22").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("Tabela_COREP").Range("J4").Copy
+wb.Sheets("C_0700_0007").Range("Z26").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("Tabela_COREP").Range("F12").Copy
+wb.Sheets("C_0700_0007").Range("G26").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("Tabela_COREP").Range("H12").Copy
+wb.Sheets("C_0700_0007").Range("T26").PasteSpecial Paste:=xlPasteValues
+
+'C_0700_0009'
+wbMe.Sheets("Tabela_COREP").Range("F17").Copy
+wb.Sheets("C_0700_0009").Range("G17").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("Tabela_COREP").Range("F15").Copy
+wb.Sheets("C_0700_0009").Range("G18").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("Tabela_COREP").Range("F14").Copy
+wb.Sheets("C_0700_0009").Range("G34").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("Tabela_COREP").Range("F26").Copy
+wb.Sheets("C_0700_0009").Range("G47").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("Tabela_COREP").Range("F19").Copy
+wb.Sheets("C_0700_0009").Range("G48").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("Tabela_COREP").Range("F27").Copy
+wb.Sheets("C_0700_0009").Range("G49").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("Tabela_COREP").Range("G17").Copy
+wb.Sheets("C_0700_0009").Range("H17").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("Tabela_COREP").Range("G15").Copy
+wb.Sheets("C_0700_0009").Range("H18").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("Tabela_COREP").Range("G14").Copy
+wb.Sheets("C_0700_0009").Range("H34").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("Tabela_COREP").Range("G26").Copy
+wb.Sheets("C_0700_0009").Range("H47").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("Tabela_COREP").Range("G19").Copy
+wb.Sheets("C_0700_0009").Range("H48").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("Tabela_COREP").Range("G27").Copy
+wb.Sheets("C_0700_0009").Range("H49").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("Tabela_COREP").Range("H14").Copy
+wb.Sheets("C_0700_0009").Range("T34").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("Tabela_COREP").Range("H26").Copy
+wb.Sheets("C_0700_0009").Range("T47").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("Tabela_COREP").Range("H26").Copy
+wb.Sheets("C_0700_0009").Range("AB47").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("Tabela_COREP").Range("H19").Copy
+wb.Sheets("C_0700_0009").Range("T48").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("Tabela_COREP").Range("H27").Copy
+wb.Sheets("C_0700_0009").Range("T49").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("Tabela_COREP").Range("H15").Copy
+wb.Sheets("C_0700_0009").Range("W18").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("Tabela_COREP").Range("H16").Copy
+wb.Sheets("C_0700_0009").Range("W34").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("Tabela_COREP").Range("H21").Copy
+wb.Sheets("C_0700_0009").Range("W48").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("Tabela_COREP").Range("I17").Copy
+wb.Sheets("C_0700_0009").Range("AB17").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("Tabela_COREP").Range("I15").Copy
+wb.Sheets("C_0700_0009").Range("AB18").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("Tabela_COREP").Range("I19").Copy
+wb.Sheets("C_0700_0009").Range("AB48").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("Tabela_COREP").Range("I27").Copy
+wb.Sheets("C_0700_0009").Range("AB49").PasteSpecial Paste:=xlPasteValues
+
+'C_0700_0010'
+wbMe.Sheets("Tabela_COREP").Range("F19").Copy
+wb.Sheets("C_0700_0010").Range("G13").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("Tabela_COREP").Range("F19").Copy
+wb.Sheets("C_0700_0010").Range("G31").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("Tabela_COREP").Range("F22").Copy
+wb.Sheets("C_0700_0010").Range("G17").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("Tabela_COREP").Range("F20").Copy
+wb.Sheets("C_0700_0010").Range("G18").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("Tabela_COREP").Range("G19").Copy
+wb.Sheets("C_0700_0010").Range("H13").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("Tabela_COREP").Range("G19").Copy
+wb.Sheets("C_0700_0010").Range("H31").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("Tabela_COREP").Range("G22").Copy
+wb.Sheets("C_0700_0010").Range("H17").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("Tabela_COREP").Range("G20").Copy
+wb.Sheets("C_0700_0010").Range("H18").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("Tabela_COREP").Range("H19").Copy
+wb.Sheets("C_0700_0010").Range("T31").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("Tabela_COREP").Range("H21").Copy
+wb.Sheets("C_0700_0010").Range("W13").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("Tabela_COREP").Range("H20").Copy
+wb.Sheets("C_0700_0010").Range("W18").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("Tabela_COREP").Range("H20").Copy
+wb.Sheets("C_0700_0010").Range("W31").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("Tabela_COREP").Range("I19").Copy
+wb.Sheets("C_0700_0010").Range("AB13").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("Tabela_COREP").Range("I22").Copy
+wb.Sheets("C_0700_0010").Range("AB17").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("Tabela_COREP").Range("I20").Copy
+wb.Sheets("C_0700_0010").Range("AB18").PasteSpecial Paste:=xlPasteValues
+
+'C_0700_0011'
+wbMe.Sheets("Tabela_COREP").Range("F24").Copy
+wb.Sheets("C_0700_0011").Range("G17").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("Tabela_COREP").Range("F26").Copy
+wb.Sheets("C_0700_0011").Range("G35").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("Tabela_COREP").Range("F27").Copy
+wb.Sheets("C_0700_0011").Range("G36").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("Tabela_COREP").Range("G24").Copy
+wb.Sheets("C_0700_0011").Range("H17").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("Tabela_COREP").Range("G26").Copy
+wb.Sheets("C_0700_0011").Range("H35").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("Tabela_COREP").Range("G27").Copy
+wb.Sheets("C_0700_0011").Range("H36").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("Tabela_COREP").Range("H26").Copy
+wb.Sheets("C_0700_0011").Range("T35").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("Tabela_COREP").Range("H27").Copy
+wb.Sheets("C_0700_0011").Range("T36").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("Tabela_COREP").Range("I24").Copy
+wb.Sheets("C_0700_0011").Range("AB17").PasteSpecial Paste:=xlPasteValues
+
+'C_0700_0017'
+wbMe.Sheets("Tabela_COREP").Range("F28").Copy
+wb.Sheets("C_0700_0017").Range("G17").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("Tabela_COREP").Range("F28").Copy
+wb.Sheets("C_0700_0017").Range("G35").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("Tabela_COREP").Range("H28").Copy
+wb.Sheets("C_0700_0017").Range("T35").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("Tabela_COREP").Range("I28").Copy
+wb.Sheets("C_0700_0017").Range("AB17").PasteSpecial Paste:=xlPasteValues
+
+'C_0901'
+wbMe.Sheets("Tabela_COREP").Range("F4").Copy
+wb.Sheets("C_0901").Range("D6").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("Tabela_COREP").Range("F9").Copy
+wb.Sheets("C_0901").Range("D11").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("Tabela_COREP").Range("F14").Copy
+wb.Sheets("C_0901").Range("D14").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("Tabela_COREP").Range("F19").Copy
+wb.Sheets("C_0901").Range("D16").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("Tabela_COREP").Range("F24").Copy
+wb.Sheets("C_0901").Range("D18").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("Tabela_COREP").Range("F28").Copy
+wb.Sheets("C_0901").Range("D27").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("Tabela_COREP").Range("G19").Copy
+wb.Sheets("C_0901").Range("H16").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("Tabela_COREP").Range("G14").Copy
+wb.Sheets("C_0901").Range("H14").PasteSpecial Paste:=xlPasteValues
+
+
+Set cl = wb.Sheets("C_0901").Range("H16")
+If cl.Value < 0 Then
+   cl.Value = -cl.Value
+End If
+Set cl = wb.Sheets("C_0901").Range("H14")
+If cl.Value < 0 Then
+   cl.Value = -cl.Value
+End If
+
+
+'nowe defaulty'
+wbMe.Sheets("Default").Range("A7").Copy
+wb.Sheets("C_0901").Range("E14").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("Default").Range("A8").Copy
+wb.Sheets("C_0901").Range("E16").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("Default").Range("A9").Copy
+wb.Sheets("C_0901").Range("F14").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("Default").Range("A10").Copy
+wb.Sheets("C_0901").Range("F16").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("Default").Range("B9").Copy
+wb.Sheets("C_0901").Range("K14").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("Default").Range("B10").Copy
+wb.Sheets("C_0901").Range("K16").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("Tabela_COREP").Range("H4").Copy
+wb.Sheets("C_0901").Range("L6").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("Tabela_COREP").Range("H9").Copy
+wb.Sheets("C_0901").Range("L11").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("Tabela_COREP").Range("J14").Copy
+wb.Sheets("C_0901").Range("L14").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("Tabela_COREP").Range("J19").Copy
+wb.Sheets("C_0901").Range("L16").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("Tabela_COREP").Range("H24").Copy
+wb.Sheets("C_0901").Range("L18").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("Tabela_COREP").Range("H28").Copy
+wb.Sheets("C_0901").Range("L27").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("Tabela_COREP").Range("I14").Copy
+wb.Sheets("C_0901").Range("M14").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("Tabela_COREP").Range("I14").Copy
+wb.Sheets("C_0901").Range("P14").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("Tabela_COREP").Range("I19").Copy
+wb.Sheets("C_0901").Range("M16").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("Tabela_COREP").Range("I19").Copy
+wb.Sheets("C_0901").Range("P16").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("Tabela_COREP").Range("I24").Copy
+wb.Sheets("C_0901").Range("M18").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("Tabela_COREP").Range("I24").Copy
+wb.Sheets("C_0901").Range("P18").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("Tabela_COREP").Range("I28").Copy
+wb.Sheets("C_0901").Range("M27").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("Tabela_COREP").Range("I28").Copy
+wb.Sheets("C_0901").Range("P27").PasteSpecial Paste:=xlPasteValues
+
+''C_3300''
+wbMe.Sheets("res_mat").Range("A3:B7").Copy
+wbMe.Sheets("res_mat").Range("A10").PasteSpecial Paste:=xlPasteValues
+Dim pt1 As PivotTable
+Set pt1 = wbMe.Sheets("RES_MAT").PivotTables("RES_MAT_PIVOT")
+wbMe.Sheets("RES_MAT").Range("E20") = pt1.GetPivotData("Suma z WYCENA_PLN").Value
+Set vl1 = wbMe.Sheets("res_mat").Range("A10:B13")
+Set vl2 = wb.Sheets("C_3300").Range("B28:B34")
+wb.Sheets("C_3300").Range("M28:M34").Value = Application.WorksheetFunction.VLookup(vl2, vl1, 2, 0)
+With wb.Sheets("C_3300").Range("M28:M34")
+        .EntireRow.Hidden = False
+        On Error Resume Next
+        Set MyRange = .SpecialCells(xlConstants, xlErrors)
+        On Error GoTo 0
+        If Not MyRange Is Nothing Then
+            MyRange.ClearContents
+         End If
+'suma dla C_3300 dla pola F13'
+wbMe.Sheets("res_mat").Range("E20").Copy
+wbMe.Sheets("res_mat").Range("E13").PasteSpecial Paste:=xlPasteValues
+wbMe.Worksheets("papiery").Range("P35").Copy
+wbMe.Sheets("res_mat").Range("F13").PasteSpecial Paste:=xlPasteValues
+With wbMe.Sheets("res_mat")
+        .Range("G13") = Application.WorksheetFunction.Round(WorksheetFunction.Sum(.Range("E13:F13")), 0)
+        .Range("G13").Copy
+    End With
+wb.Sheets("C_3300").Range("F13").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("res_mat").Range("G13").Copy
+wb.Sheets("C_3300").Range("G13").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("res_mat").Range("B14").Copy
+wb.Sheets("C_3300").Range("M13").PasteSpecial Paste:=xlPasteValues
+'SALDO_PLN dla NBP'
+wbMe.Worksheets("papiery").Range("P35").Copy
+wb.Sheets("C_3300").Range("O13").PasteSpecial Paste:=xlPasteValues
+wbMe.Worksheets("papiery").Range("P35").Copy
+wb.Sheets("C_3300").Range("O28").PasteSpecial Paste:=xlPasteValues
+                             
+
+''C_3402_0001''
+
+wb.Sheets("C_3402_0001").Range("G8") = wbMe.Sheets("pochodne").Range("A:A").Cells.SpecialCells(xlCellTypeConstants).Count - 1
+wbMe.Sheets("pochodne").Range("X35").Copy
+wb.Sheets("C_3402_0001").Range("H8").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("pochodne").Range("T35").Copy
+wb.Sheets("C_3402_0001").Range("I8").PasteSpecial Paste:=xlPasteValues
+wbMe.Worksheets("pochodne").Range("T37").Copy
+wb.Sheets("C_3402_0001").Range("J8").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("pochodne").Range("U35").Copy
+wb.Sheets("C_3402_0001").Range("O8").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("pochodne").Range("Z35").Copy
+wb.Sheets("C_3402_0001").Range("P8").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("pochodne").Range("AA35").Copy
+wb.Sheets("C_3402_0001").Range("T8").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("pochodne").Range("AA35").Copy
+wb.Sheets("C_3402_0001").Range("U8").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("pochodne").Range("AA35").Copy
+wb.Sheets("C_3402_0001").Range("W8").PasteSpecial Paste:=xlPasteValues
+
+''C_3402_0002''
+
+wb.Sheets("C_3402_0002").Range("G8") = wbMe.Sheets("pochodne").Range("A:A").Cells.SpecialCells(xlCellTypeConstants).Count - 1
+wbMe.Sheets("pochodne").Range("X35").Copy
+wb.Sheets("C_3402_0002").Range("H8").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("pochodne").Range("X35").Copy
+wb.Sheets("C_3402_0002").Range("H20").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("pochodne").Range("T35").Copy
+wb.Sheets("C_3402_0002").Range("I8").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("pochodne").Range("T35").Copy
+wb.Sheets("C_3402_0002").Range("I20").PasteSpecial Paste:=xlPasteValues
+wbMe.Worksheets("pochodne").Range("T37").Copy
+wb.Sheets("C_3402_0002").Range("J20").PasteSpecial Paste:=xlPasteValues
+wbMe.Worksheets("pochodne").Range("T37").Copy
+wb.Sheets("C_3402_0002").Range("J8").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("pochodne").Range("U35").Copy
+wb.Sheets("C_3402_0002").Range("O8").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("pochodne").Range("Z35").Copy
+wb.Sheets("C_3402_0002").Range("P8").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("pochodne").Range("AA35").Copy
+wb.Sheets("C_3402_0002").Range("T8").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("pochodne").Range("AA35").Copy
+wb.Sheets("C_3402_0002").Range("U8").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("pochodne").Range("AA35").Copy
+wb.Sheets("C_3402_0002").Range("U20").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("pochodne").Range("AA35").Copy
+wb.Sheets("C_3402_0002").Range("V20").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("pochodne").Range("AA35").Copy
+wb.Sheets("C_3402_0002").Range("W8").PasteSpecial Paste:=xlPasteValues
+
+''C_3403_0002''
+wbMe.Sheets("pochodne").Range("T45").Copy
+wb.Sheets("C_3403_0002").Range("G10").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("pochodne").Range("T45").Copy
+wb.Sheets("C_3403_0002").Range("G11").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("pochodne").Range("S35").Copy
+wb.Sheets("C_3403_0002").Range("H10").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("pochodne").Range("S35").Copy
+wb.Sheets("C_3403_0002").Range("H11").PasteSpecial Paste:=xlPasteValues
+
+wbMe.Sheets("pochodne").Range("T71").Copy
+wb.Sheets("C_3403_0002").Range("I10").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("pochodne").Range("T71").Copy
+wb.Sheets("C_3403_0002").Range("I11").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("pochodne").Range("T72").Copy
+wb.Sheets("C_3403_0002").Range("J10").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("pochodne").Range("T72").Copy
+wb.Sheets("C_3403_0002").Range("J11").PasteSpecial Paste:=xlPasteValues
+
+wbMe.Sheets("pochodne").Range("B38").Copy
+wb.Sheets("C_3403_0002").Range("K10").PasteSpecial Paste:=xlPasteValues
+wb.Sheets("C_3403_0002").Range("K11").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("pochodne").Range("A38").Copy
+wb.Sheets("C_3403_0002").Range("K11").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("pochodne").Range("T47").Copy
+wb.Sheets("C_3403_0002").Range("G17").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("pochodne").Range("T46").Copy
+wb.Sheets("C_3403_0002").Range("G18").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("pochodne").Range("T47").Copy
+wb.Sheets("C_3403_0002").Range("G19").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("pochodne").Range("B52").Copy
+wb.Sheets("C_3403_0002").Range("H17").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("pochodne").Range("B52").Copy
+wb.Sheets("C_3403_0002").Range("H19").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("pochodne").Range("T40").Copy
+wb.Sheets("C_3403_0002").Range("H18").PasteSpecial Paste:=xlPasteValues
+
+wbMe.Sheets("pochodne").Range("T57").Copy
+wb.Sheets("C_3403_0002").Range("I17").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("pochodne").Range("T57").Copy
+wb.Sheets("C_3403_0002").Range("I19").PasteSpecial Paste:=xlPasteValues
+
+
+
+wbMe.Sheets("pochodne").Range("T41").Copy
+wb.Sheets("C_3403_0002").Range("I18").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("pochodne").Range("T62").Copy
+wb.Sheets("C_3403_0002").Range("J17").PasteSpecial Paste:=xlPasteValues
+wb.Sheets("C_3403_0002").Range("J18").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("pochodne").Range("T62").Copy
+wb.Sheets("C_3403_0002").Range("J18").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("pochodne").Range("T62").Copy
+wb.Sheets("C_3403_0002").Range("J19").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("pochodne").Range("T60").Copy
+wb.Sheets("C_3403_0002").Range("J18").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("pochodne").Range("T51").Copy
+wb.Sheets("C_3403_0002").Range("T62").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("pochodne").Range("B67").Copy
+wb.Sheets("C_3403_0002").Range("K17").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("pochodne").Range("b67").Copy
+wb.Sheets("C_3403_0002").Range("K19").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("pochodne").Range("b42").Copy
+wb.Sheets("C_3403_0002").Range("K18").PasteSpecial Paste:=xlPasteValues
+
+''C_3406'
+wb.Sheets("C_3406").Range("J7") = wbMe.Sheets("pochodne").Range("A:A").Cells.SpecialCells(xlCellTypeConstants).Count - 1
+wbMe.Sheets("pochodne").Range("X35").Copy
+wb.Sheets("C_3406").Range("K7").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("pochodne").Range("T35").Copy
+wb.Sheets("C_3406").Range("L7").PasteSpecial Paste:=xlPasteValues
+wbMe.Worksheets("pochodne").Range("T37").Copy
+wb.Sheets("C_3406").Range("M7").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("pochodne").Range("AA35").Copy
+wb.Sheets("C_3406").Range("N7").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("pochodne").Range("AA35").Copy
+wb.Sheets("C_3406").Range("O7").PasteSpecial Paste:=xlPasteValues
+
+''C_3501''
+wbMe.Sheets("NPE").Range("M4") = wbMe.Sheets("NPE").Range("K3") + wbMe.Sheets("NPE").Range("K4")
+wbMe.Sheets("NPE").Range("M6") = wbMe.Sheets("NPE").Range("K5") + wbMe.Sheets("NPE").Range("K6")
+
+wbMe.Sheets("NPE").Range("M4").Copy
+wb.Sheets("C_3501").Range("D18").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("NPE").Range("M6").Copy
+wb.Sheets("C_3501").Range("E18").PasteSpecial Paste:=xlPasteValues
+
+''C_3502''
+wbMe.Sheets("NPE").Range("J5").Copy
+wb.Sheets("C_3502").Range("D13").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("NPE").Range("J6").Copy
+wb.Sheets("C_3502").Range("D15").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("NPE").Range("J3").Copy
+wb.Sheets("C_3502").Range("E15").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("NPE").Range("J4").Copy
+wb.Sheets("C_3502").Range("E13").PasteSpecial Paste:=xlPasteValues
+wb.Sheets("C_0300").Activate
+
+                                                         '''''''''''''''''''''' Zapisujemy plik CMR_CJ_COREP ''''''''''''''''''''''
+            
+'''Zapisujemy plik CMR_CJ_MINIMAL w folderze'''
+Dim Filename
+Dim MyFolder1
+Filename = "CMR_CJ_MINIMAL_"
+MyFolder1 = "\\bank.ad.pkobp.pl\dfs\DaneGrupowe\BH\BPR\Wlasne\003_AdekwatnoúÊ_kapita≥owa\_Beata_replacement\_KROK_4_COREP_ITS\Robocze\macro\gotowe raporty\"
+wb.SaveAs (MyFolder1 & Filename & Format(Now(), "MM.YYYY") & ".xlsx")
+End With
+
+
+                                                         '''''''''''''''''''''' Otwieramy COREP_LR i uzupe≥niamy ''''''''''''''''''''''
+Dim data_wb2 As Workbook
+Beep
+CarryOn = MsgBox("Czy Chcesz uzupe≥niÊ plik CMR - LRJ_MINIMAL?", vbYesNo, "Czy kontynuowaÊ?")
+If CarryOn = vbYes Then
+
+MyFolder = "\\bank.ad.pkobp.pl\dfs\DaneGrupowe\BH\BPR\Wlasne\003_AdekwatnoúÊ_kapita≥owa\_Beata_replacement\_KROK_4_COREP_ITS\Robocze\macro\formularze"
+MyFile = Dir(MyFolder & "\CMR - LRJ_MINIMAL_*.xlsx")
+
+If MyFile <> "" Then
+Set data_wb2 = Workbooks.Open(MyFolder & "\" & MyFile, UpdateLinks:=0)
+
+''Wybierz PLIK BILANS''
+Dim CarryOn_1
+Dim strPath1
+Dim Bilans
+CarryOn_1 = MsgBox("Wybierz bilans za miesiπc sprawozdawczy")
+strPath1 = selectFile1
+If strPath1 = "" Then Exit Sub
+Set Bilans = Workbooks.Open(strPath1, False, True)
+
+Bilans.Sheets("Bilans gie≥da").Range("H8").Copy
+data_wb2.Sheets("C_4000").Range("F11").PasteSpecial Paste:=xlPasteValues
+data_wb2.Sheets("C_4000").Range("F11") = Application.WorksheetFunction.Round(data_wb2.Sheets("C_4000").Range("F11"), 0)
+data_wb2.Sheets("C_4000").Range("G11").PasteSpecial Paste:=xlPasteValues
+data_wb2.Sheets("C_4000").Range("G11") = Application.WorksheetFunction.Round(data_wb2.Sheets("C_4000").Range("G11"), 0)
+data_wb2.Sheets("C_4000").Range("F13") = Bilans.Sheets("Bilans gie≥da").Range("H19") - data_wb2.Sheets("C_4000").Range("F11")
+data_wb2.Sheets("C_4000").Range("F13") = Application.WorksheetFunction.Round(data_wb2.Sheets("C_4000").Range("F13"), 0)
+data_wb2.Sheets("C_4000").Range("G13") = Bilans.Sheets("Bilans gie≥da").Range("H19") - data_wb2.Sheets("C_4000").Range("G11")
+data_wb2.Sheets("C_4000").Range("G13") = Application.WorksheetFunction.Round(data_wb2.Sheets("C_4000").Range("G13"), 0)
+data_wb2.Sheets("C_4700").Range("E67") = Bilans.Sheets("Fundusze w≥asne").Range("B18") + Bilans.Sheets("Fundusze w≥asne").Range("B19")
+wbMe.Sheets("INFO").Range("C44").Copy
+data_wb2.Sheets("C_4000").Range("E67") = Application.WorksheetFunction.Round(data_wb2.Sheets("C_4000").Range("E67"), 0)
+data_wb2.Sheets("C_4000").Range("E75").PasteSpecial Paste:=xlPasteValues
+data_wb2.Sheets("C_4000").Range("E75") = Application.WorksheetFunction.Round(data_wb2.Sheets("C_4000").Range("E75"), 0)
+
+''
+wb.Sheets("C_0700_0001").Range("G18").Copy
+data_wb2.Sheets("C_4000").Range("I14").PasteSpecial Paste:=xlPasteValues
+data_wb2.Sheets("C_4000").Range("I14") = Application.WorksheetFunction.Round(data_wb2.Sheets("C_4000").Range("I14"), 0)
+wbMe.Sheets("pochodne").Range("X35").Copy
+data_wb2.Sheets("C_4000").Range("I11").PasteSpecial Paste:=xlPasteValues
+data_wb2.Sheets("C_4000").Range("I11") = Application.WorksheetFunction.Round(data_wb2.Sheets("C_4000").Range("I11"), 0)
+wbMe.Worksheets("papiery").Range("P35").Copy
+data_wb2.Sheets("C_4000").Range("F30").PasteSpecial Paste:=xlPasteValues
+data_wb2.Sheets("C_4000").Range("F30") = Application.WorksheetFunction.Round(data_wb2.Sheets("C_4000").Range("F30"), 0)
+data_wb2.Sheets("C_4000").Range("F33") = data_wb2.Sheets("C_4000").Range("F11") + data_wb2.Sheets("C_4000").Range("F13")
+data_wb2.Sheets("C_4000").Range("F33") = Application.WorksheetFunction.Round(data_wb2.Sheets("C_4000").Range("F33"), 0)
+
+data_wb2.Sheets("C_4300A").Range("F6") = wb.Sheets("C_0700_0001").Range("G18") * 0.5
+data_wb2.Sheets("C_4300A").Range("F6") = Application.WorksheetFunction.Round(data_wb2.Sheets("C_4300A").Range("F6"), 0)
+wb.Worksheets("C_0700_0001").Range("AE18").Copy
+data_wb2.Sheets("C_4300A").Range("G6").PasteSpecial Paste:=xlPasteValues
+data_wb2.Sheets("C_4300A").Range("G6") = Application.WorksheetFunction.Round(data_wb2.Sheets("C_4300A").Range("G6"), 0)
+
+wb.Worksheets("C_0700_0002").Range("Y17").Copy
+data_wb2.Sheets("C_4300B").Range("F8").PasteSpecial Paste:=xlPasteValues
+wb.Worksheets("C_0700_0010").Range("Y17").Copy
+data_wb2.Sheets("C_4300B").Range("F18").PasteSpecial Paste:=xlPasteValues
+
+
+wb.Worksheets("C_0700_0010").Range("AE17").Copy
+data_wb2.Sheets("C_4300B").Range("G18").PasteSpecial Paste:=xlPasteValues
+wb.Worksheets("C_0700_0009").Range("AE17").Copy
+data_wb2.Sheets("C_4300B").Range("G19").PasteSpecial Paste:=xlPasteValues
+wb.Worksheets("C_0700_0009").Range("Y17").Copy
+data_wb2.Sheets("C_4300B").Range("F19").PasteSpecial Paste:=xlPasteValues
+wb.Worksheets("C_0700_0011").Range("Y17").Copy
+data_wb2.Sheets("C_4300B").Range("F26").PasteSpecial Paste:=xlPasteValues
+wb.Worksheets("C_0700_0017").Range("Y17").Copy
+data_wb2.Sheets("C_4300B").Range("F27").PasteSpecial Paste:=xlPasteValues
+wb.Worksheets("C_0700_0011").Range("AE17").Copy
+data_wb2.Sheets("C_4300B").Range("G26").PasteSpecial Paste:=xlPasteValues
+wb.Worksheets("C_0700_0017").Range("Y17").Copy
+data_wb2.Sheets("C_4300B").Range("F27").PasteSpecial Paste:=xlPasteValues
+data_wb2.Sheets("C_4300B").Range("G27").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("INFO").Range("C44").Copy
+data_wb2.Sheets("C_4700").Range("E76").PasteSpecial Paste:=xlPasteValues
+wbMe.Sheets("INFO").Range("B53").Copy
+data_wb2.Sheets("C_4700").Range("E93").PasteSpecial Paste:=xlPasteValues
+
+
+data_wb2.Sheets("C_4700").Range("F51") = wb.Sheets("C_0700_0007").Range("Y17") * -1
+wb.Sheets("C_0700_0001").Range("Y17").Copy
+data_wb2.Sheets("C_4700").Range("E37").PasteSpecial Paste:=xlPasteValues
+data_wb2.Sheets("C_4700").Range("E51") = data_wb2.Sheets("C_4700").Range("F51") - data_wb2.Sheets("C_4700").Range("E12")
+
+wbMe.Sheets("INFO").Range("B51").Copy
+data_wb2.Sheets("C_4700").Range("H71").PasteSpecial Paste:=xlPasteValues
+data_wb2.Sheets("C_4700").Range("E75") = data_wb2.Sheets("C_4700").Range("H71") / data_wb2.Sheets("C_4700").Range("E69")
+Bilans.Close
+
+Dim MyFolderLR
+MyFolderLR = "\\bank.ad.pkobp.pl\dfs\DaneGrupowe\BH\BPR\Wlasne\003_AdekwatnoúÊ_kapita≥owa\_Beata_replacement\_KROK_4_COREP_ITS\Robocze\macro\gotowe raporty\"
+MyFileLR = ("CMR_LR_MINIMAL_" & Format(Now, "mm_yyyy"))
+data_wb2.SaveAs (MyFolderLR & MyFileLR)
+End If
+End If
+
+
+
+                                    '''''''''''''''''''''' Jeúli potrzeba to aktualizujemy plik PKOBH_Podzia≥ na kraje''''''''''''''''''''''
+Dim PvtKraje As PivotTable
+Dim data_wb As Workbook
+
+Beep
+Dim CarryOn2
+CarryOn2 = MsgBox("Czy Chcesz uzupe≥niÊ plik BHPKO_mm_yyyy_podzia≥ po krajach?", vbYesNo, "Czy kontynuowaÊ?")
+If CarryOn2 = vbYes Then
+
+Dim MyFolderKRAJ
+MyFolderKRAJ = "\\bank.ad.pkobp.pl\dfs\DaneGrupowe\BH\BPR\Wlasne\003_AdekwatnoúÊ_kapita≥owa\_Beata_replacement\_KROK_4_COREP_ITS\Robocze\macro\gotowe raporty\"
+MyFile = Dir(MyFolder & "\BHPKO_mm_yyyy_podzia≥ po krajach*.xlsx")
+
+If MyFile <> "" Then
+Set data_wb = Workbooks.Open(MyFolder & "\" & MyFile, UpdateLinks:=0)
+Set PvtKraje = data_wb.Sheets("PODZIA£_KRAJE").PivotTables("KRAJE")
+
+PvtKraje.ChangePivotCache ActiveWorkbook. _
+       PivotCaches.Create(SourceType:=xlDatabase, SourceData:=wbMe.Sheets("corep").UsedRange, _
+       Version:=6)
+MyFileKRAJ = ("BHPKO_" & Format(Now, "mm_yyyy") & "_podzia≥ po krajach")
+data_wb.SaveAs (MyFolderKRAJ & MyFileKRAJ)
+End If
+End If
+        
+                                    '''''''''''''''''''''' Jeúli potrzeba to aktualizujemy plik CA_AdekwatnoúÊ podstawowe informacje ''''''''''''''''''''''
+
+Beep
+Dim CarryOn3
+CarryOn3 = MsgBox("PKOBH_mmyyyy_CA_Adekwatnosc_kapita≥owa_podstawowe_dane", vbYesNo, "Czy kontynuowaÊ?")
+If CarryOn3 = vbYes Then
+
+MyFolder = "\\bank.ad.pkobp.pl\dfs\DaneGrupowe\BH\BPR\Wlasne\003_AdekwatnoúÊ_kapita≥owa\_Beata_replacement\_KROK_4_COREP_ITS\Robocze\macro\formularze"
+MyFile = Dir(MyFolder & "\PKOBH_mmyyyy_CA_Adekwatnosc_kapita≥owa_podstawowe_dane*.xlsx")
+
+If MyFile <> "" Then
+''
+Dim data_wb1 As Workbook
+Set data_wb1 = Workbooks.Open(MyFolder & "\" & MyFile, UpdateLinks:=0)
+If data_wb1.Sheets("CA").Range("C8") = "Kapita≥ podstawowy Tier I" Then
+wbMe.Sheets("INFO").Range("C34").Copy
+data_wb1.Sheets("CA").Range("G8").PasteSpecial Paste:=xlPasteValues
+End If
+If data_wb1.Sheets("CA").Range("C14") = "WYM”G KAPITA£OWY Z TYTU£U RYZYKA KREDYTOWEGO, RYZYKA KREDYTOWEGO KONTRAHENTA, RYZYKA ROZMYCIA ORAZ DOSTAW Z P”èNIEJSZYM TERMINEM ROZLICZENIA" Then
+wbMe.Sheets("INFO").Range("C37").Copy
+data_wb1.Sheets("CA").Range("G14").PasteSpecial Paste:=xlPasteValues
+End If
+If data_wb1.Sheets("CA").Range("C17") = "WYM”G KAPITA£OWY Z TYTU£U RYZYKA OPERACYJNEGO" Then
+wbMe.Sheets("INFO").Range("C38").Copy
+data_wb1.Sheets("CA").Range("G17").PasteSpecial Paste:=xlPasteValues
+
+
+
+''
+Dim MyFolderCA
+MyFolderCA = "\\bank.ad.pkobp.pl\dfs\DaneGrupowe\BH\BPR\Wlasne\003_AdekwatnoúÊ_kapita≥owa\_Beata_replacement\_KROK_4_COREP_ITS\Robocze\macro\gotowe raporty\"
+MyFileCA = ("PKOBH_" & Format(Now, "mm_yyyy") & "_CA_Adekwatnosc_kapita≥owa_podstawowe_dane")
+data_wb1.SaveAs (MyFolderCA & MyFileCA)
+End If
+End If
+End If
+
+
+                                            '''''''''''''''''''''' Usuwanie pÛl z wyliczeniami,aby zosta≥y "czyste dane" ''''''''''''''''''''''
+
+wbMe.Sheets("NPE").Range("J3:M6").ClearContents
+wbMe.Sheets("Default").Range("A7:B10").ClearContents
+wbMe.Sheets("res_mat").Range("E13:G13").ClearContents
+wbMe.Sheets("res_mat").Range("E20").ClearContents
+wbMe.Sheets("pochodne").Range("X35").ClearContents
+wbMe.Sheets("pochodne").Range("Z35").ClearContents
+wbMe.Sheets("pochodne").Range("AA35").ClearContents
+wbMe.Sheets("pochodne").Range("X35").ClearContents
+wbMe.Sheets("pochodne").Range("S35").ClearContents
+wbMe.Sheets("pochodne").Range("T35:T72").ClearContents
+wbMe.Sheets("pochodne").Range("U35").ClearContents
+wbMe.Sheets("pochodne").Range("B41:B67").ClearContents
+data_wb2.Sheets("C_4700").Range("F51").ClearContents
+data_wb2.Sheets("C_4700").Range("H71").ClearContents
+
+wbStart.Activate
+
+
+                                                
+                                                '''''''''''''''''''''' Zamkykamy i zapisujemy pliki robocze''''''''''''''''''''''
+If Not data_wb2 Is Nothing Then
+data_wb2.Close True
+Else
+End If
+If Not data_wb1 Is Nothing Then
+data_wb1.Close True
+Else
+End If
+If Not data_wb Is Nothing Then
+data_wb.Close True
+Else
+End If
+wb.Close True
+
+
+
+
+Beep
+MsgBox "Formularz uzupe≥niony ! SPRAWDè JAKOå∆ DANYCH !"
+
+
+End Sub
+
+Private Function selectFile()
+Dim fd As Office.FileDialog
+
+Set fd = Application.FileDialog(msoFileDialogFilePicker)
+
+With fd
+.InitialFileName = ActiveWorkbook.path
+.AllowMultiSelect = False
+.Filters.Clear
+.Filters.Add "Excel", "*.xlsx"
+
+If .Show = True Then selectFile = .SelectedItems(1)
+
+End With
+End Function
+Private Function selectFile1()
+Dim fd1 As Office.FileDialog
+
+Set fd1 = Application.FileDialog(msoFileDialogFilePicker)
+
+With fd1
+.InitialFileName = "\\bank.ad.pkobp.pl\dfs\DaneGrupowe\BH\BPR\Wlasne\015_dane_BFK\bilans"
+.AllowMultiSelect = False
+.Filters.Clear
+.Filters.Add "Excel", "*.xlsx"
+
+If .Show = True Then selectFile1 = .SelectedItems(1)
+
+End With
+End Function
