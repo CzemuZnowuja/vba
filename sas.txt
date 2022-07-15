@@ -1,0 +1,14 @@
+/*tworzymy zmienn¹ DATE_FUTURE do grupowania*/
+%let date_future=%sysfunc(intnx(year,%sysfunc(Today()),+1,s));
+proc format;
+value vintf
+  &date_future-high = 'FUTURE'
+  other=[yymmd7.]
+;
+run;
+/*agregujemy wyniki do daty vintf jako old*/
+proc summary data=diff_finale_act nway;
+    class policy_vintage;
+    format policy_vintage vintf.;
+    var TODAY PREV_WEEK PREV_MONTH DIFF_WEEK DIFF_MONTH;
+    output out=diff_finale_act sum=;
